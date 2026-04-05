@@ -22,13 +22,16 @@ export async function POST(req: Request) {
     cookieStore.set("copy_ai_auth", "ok", {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });
 
     return NextResponse.json({ ok: true });
   } catch {
-    return NextResponse.json({ error: "Erro ao fazer login." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Erro ao fazer login." },
+      { status: 500 }
+    );
   }
 }
