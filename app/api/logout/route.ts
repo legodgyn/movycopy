@@ -7,7 +7,7 @@ export async function POST() {
   cookieStore.set("copy_ai_auth", "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: false,
     path: "/",
     maxAge: 0,
   });
