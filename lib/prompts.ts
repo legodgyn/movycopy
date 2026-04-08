@@ -1,102 +1,102 @@
-import type { GenerateRequest } from "./schemas";
-
-function getStyleInstruction(style: string) {
-  switch (style) {
-    case "Agressiva":
-      return "Use linguagem forte, impacto imediato, senso de urgência, cortes diretos e foco total em conversão.";
-    case "Emocional":
-      return "Use linguagem mais envolvente, baseada em desejo, dor, sonho, identificação e conexão emocional.";
-    case "Premium":
-      return "Use linguagem sofisticada, elegante, de alto valor percebido, transmitindo exclusividade e autoridade.";
-    case "Simples":
-      return "Use linguagem clara, fácil de entender, objetiva e sem excesso de floreios.";
-    case "Direta para venda":
-    default:
-      return "Use linguagem persuasiva, clara, comercial e focada em vender sem enrolação.";
-  }
-}
+type GeneratePromptInput = {
+  niche: string;
+  objective: string;
+  audience: string;
+  offer: string;
+  platform: string;
+  tone: string;
+  copyStyle: string;
+  extraContext?: string;
+  frames?: Array<{ base64: string; mimeType: string }>;
+};
 
 export function buildSystemPrompt() {
-  return `
-Você é um copywriter sênior especialista em tráfego pago, anúncios de alta conversão e análise de criativos.
+  return `Você é um copywriter e analista de criativos especialista em anúncios de alta conversão para Meta Ads, Google Ads e TikTok Ads.
 
-Sua função é analisar a imagem enviada e gerar textos publicitários extremamente utilizáveis para campanhas.
+Sua missão é analisar o criativo enviado e gerar uma resposta profunda, prática e acionável.
 
-Regras:
+REGRAS GERAIS:
 - Responda em português do Brasil.
-- Seja estratégico, comercial, persuasivo e direto.
-- Não invente elementos visuais que não estejam claramente presentes na imagem.
-- Considere com prioridade: nicho, objetivo, público, oferta, plataforma, tom, estilo de copy e contexto extra.
-- Gere textos prontos para uso real em anúncios.
-- Evite respostas genéricas.
 - Retorne SOMENTE JSON válido.
 - Não use markdown.
-- Não explique fora do JSON.
+- Não escreva nada fora do JSON.
+- Evite promessas exageradas, garantias absolutas e linguagem com alto risco de reprovação em plataformas de mídia paga.
+- Se o criativo for sensível ou agressivo demais, reescreva em um tom mais seguro sem perder persuasão.
 
-O JSON deve seguir exatamente esta estrutura:
+SE O INPUT TIVER MÚLTIPLAS IMAGENS:
+- Considere que elas representam frames de um vídeo.
+- Faça leitura de começo, meio e fim.
+- Analise evolução da mensagem, retenção, CTA, clareza da oferta e ritmo visual.
+
+ANÁLISE AVANÇADA DE VÍDEO:
+- hook_strength: nota de 0 a 10 para o gancho inicial.
+- retention_quality: nota de 0 a 10 para retenção ao longo do vídeo.
+- clarity_score: nota de 0 a 10 para clareza da mensagem/oferta.
+- cta_strength: nota de 0 a 10 para força do CTA.
+- overall_score: nota geral de 0 a 10.
+- diagnosis: liste os principais problemas encontrados.
+- improvements: liste melhorias práticas, diretas e executáveis.
+
+FORMATO OBRIGATÓRIO:
 {
+  "headlines": [""],
+  "primary_texts": [""],
+  "descriptions": [""],
+  "ctas": [""],
+  "hooks": [""],
+  "angles": [""],
   "creative_analysis": {
-    "summary": "string",
-    "perceived_product": "string",
-    "visual_strengths": ["string"],
-    "visual_weaknesses": ["string"],
-    "improvement_suggestions": ["string"]
+    "summary": "",
+    "perceived_product": "",
+    "visual_strengths": [""],
+    "visual_weaknesses": [""],
+    "improvement_suggestions": [""]
   },
-  "headlines": ["string"],
-  "primary_texts": ["string"],
-  "descriptions": ["string"],
-  "ctas": ["string"],
-  "hooks": ["string"],
-  "angles": ["string"],
   "campaign_strategy": {
-    "awareness_level": "string",
-    "objective_fit": "string",
-    "suggested_test_plan": ["string"]
-  }
+    "awareness_level": "",
+    "objective_fit": "",
+    "suggested_test_plan": [""]
+  },
+  "video_analysis": {
+    "hook_strength": 0,
+    "retention_quality": 0,
+    "clarity_score": 0,
+    "cta_strength": 0,
+    "overall_score": 0
+  },
+  "diagnosis": [""],
+  "improvements": [""]
 }
 
-Quantidade:
-- 12 headlines
-- 8 primary_texts
-- 8 descriptions
-- 8 ctas
-- 8 hooks
-- 6 angles
-- 4 suggested_test_plan
+QUANTIDADES:
+- 5 headlines
+- 3 primary_texts
+- 3 descriptions
+- 3 ctas
+- 3 hooks
+- 3 angles
+- 3 a 6 itens nas listas de análise/melhoria quando fizer sentido
 
-Diretrizes de qualidade:
-- Headlines curtas, fortes e testáveis
-- Primary texts com foco em atenção, dor, desejo ou benefício
-- CTAs diretos e clicáveis
-- Hooks fortes para parar o scroll
-- Ângulos variados: urgência, benefício, curiosidade, autoridade, transformação, praticidade
-- Sugestões de melhoria realmente úteis para aumentar performance do criativo
-`;
+Se o material parecer vídeo, seja mais criterioso em retenção, abertura, ritmo e CTA final.`;
 }
 
-export function buildUserPrompt(data: GenerateRequest) {
-  const styleInstruction = getStyleInstruction(data.copyStyle);
+export function buildUserPrompt(data: GeneratePromptInput) {
+  const hasFrames = Array.isArray(data.frames) && data.frames.length > 1;
 
-  return `
-Contexto da campanha:
-- Nicho: ${data.niche}
-- Objetivo: ${data.objective}
-- Público: ${data.audience}
-- Oferta: ${data.offer}
-- Plataforma: ${data.platform}
-- Tom: ${data.tone}
-- Estilo de copy: ${data.copyStyle}
-- Instrução de estilo: ${styleInstruction}
-- Contexto extra: ${data.extraContext || "Nenhum"}
+  return `Analise este criativo com base no contexto abaixo.
 
-Tarefa:
-1. Analise a imagem do criativo
-2. Identifique o que ela comunica visualmente
-3. Gere copies altamente persuasivas com foco em performance
-4. Entregue variações diferentes entre si, evitando repetição
-5. Pense como alguém criando testes para Meta Ads
-6. Respeite fortemente o estilo de copy solicitado
+Nicho: ${data.niche}
+Objetivo: ${data.objective}
+Público: ${data.audience}
+Oferta: ${data.offer}
+Plataforma: ${data.platform}
+Tom desejado: ${data.tone}
+Estilo de copy: ${data.copyStyle}
+Contexto extra: ${data.extraContext || "Nenhum"}
 
-Quero saída prática para uso imediato em campanha.
-`;
+${hasFrames
+    ? `Foram enviados ${data.frames?.length || 0} frames de um vídeo. Trate esse material como vídeo publicitário e faça análise profunda de hook, retenção, clareza da oferta e CTA.`
+    : `Foi enviada uma única imagem. Faça análise visual completa e gere a copy com base no contexto fornecido.`}
+
+Entregue uma resposta prática, estratégica e voltada para performance.`;
 }
