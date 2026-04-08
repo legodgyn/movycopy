@@ -8,20 +8,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-
-    const normalizedBody = {
-      ...body,
-      imageBase64:
-        body?.imageBase64 ||
-        body?.frames?.[0]?.base64 ||
-        "",
-      mimeType:
-        body?.mimeType ||
-        body?.frames?.[0]?.mimeType ||
-        "",
-    };
-
-    const parsed = GenerateRequestSchema.safeParse(normalizedBody);
+    const parsed = GenerateRequestSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -35,23 +22,27 @@ export async function POST(req: Request) {
 
     const data = parsed.data;
 
-    const visualInputs = Array.isArray(body?.frames) && body.frames.length > 0
-      ? body.frames.map((frame: { base64: string; mimeType: string }) => ({
-          type: "input_image" as const,
-          image_url: `data:${frame.mimeType};base64,${frame.base64}`,
-          detail: "auto" as const,
-        }))
-      : [
-          {
+    const visualInputs =
+      data.frames && data.frames.length > 0
+        ? data.frames.map((frame) => ({
             type: "input_image" as const,
-            image_url: `data:${data.mimeType};base64,${data.imageBase64}`,
+            image_url: `data:${frame.mimeType};base64,${frame.base64}`,
             detail: "auto" as const,
-          },
-        ];
+          }))
+        : [
+            {
+              type: "input_image" as const,
+              image_url: `data:${data.mimeType};base64,${data.imageBase64}`,
+              detail: "auto" as const,
+            },
+          ];
 
-    const videoInstruction = Array.isArray(body?.frames) && body.frames.length > 0
-      ? `\nVocê recebeu vários frames de um vídeo publicitário. Trate a entrada como uma sequência visual do mesmo anúncio e analise:\n- abertura\n- desenvolvimento da mensagem\n- consistência visual\n- clareza da oferta\n- presença e força do CTA\n- ritmo e retenção visual\n- coerência entre início, meio e fim\n`
-      : "";
+    const userPrompt =
+      buildUserPrompt({
+        ...data,
+        frames: data.frames,
+      }) +
+      "\n\nSe houver múltiplos frames, trate como vídeo publicitário e seja especialmente crítico em hook, retenção, clareza da oferta, construção da narrativa e força do CTA final.";
 
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
@@ -62,13 +53,7 @@ export async function POST(req: Request) {
         },
         {
           role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: `${buildUserPrompt(data)}${videoInstruction}`,
-            },
-            ...visualInputs,
-          ],
+          content: [{ type: "input_text", text: userPrompt }, ...visualInputs],
         },
       ],
     });
