@@ -6,13 +6,14 @@ import {
   Sparkles,
   Upload,
   Image as ImageIcon,
+  Video,
   Wand2,
   Flame,
   Download,
   FileJson,
   LayoutPanelTop,
 } from "lucide-react";
-import { fileToBase64 } from "@/lib/utils";
+import { extractVideoFrame, fileToBase64 } from "@/lib/utils";
 import type { GeneratedCopy } from "@/lib/schemas";
 import { ResultCard } from "./result-card";
 import { AdPreviewCard } from "@/components/ad-preview-card";
@@ -55,7 +56,7 @@ type MetaReadyPayload = {
     objective: string;
     style: string;
     platform: string;
-    creative_type: "image";
+    creative_type: "image" | "video";
     file_name: string;
     niche: string;
     audience: string;
@@ -103,8 +104,11 @@ export function CampaignForm() {
       return;
     }
 
-    if (!selectedFile.type.startsWith("image/")) {
-      setError("Na copy completa, envie uma imagem válida.");
+    if (
+      !selectedFile.type.startsWith("image/") &&
+      !selectedFile.type.startsWith("video/")
+    ) {
+      setError("Na copy completa, envie uma imagem ou vídeo válido.");
       return;
     }
 
@@ -119,10 +123,19 @@ export function CampaignForm() {
       setResult(null);
 
       if (!file) {
-        throw new Error("Selecione uma imagem.");
+        throw new Error("Selecione uma imagem ou vídeo.");
       }
 
-      const imageBase64 = await fileToBase64(file);
+      let imageBase64 = "";
+      let mimeType = file.type;
+
+      if (file.type.startsWith("video/")) {
+        const frame = await extractVideoFrame(file);
+        imageBase64 = frame.base64;
+        mimeType = frame.mimeType;
+      } else {
+        imageBase64 = await fileToBase64(file);
+      }
 
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -131,7 +144,7 @@ export function CampaignForm() {
         },
         body: JSON.stringify({
           imageBase64,
-          mimeType: file.type,
+          mimeType,
           ...form,
           extraContext: extraInstruction
             ? `${form.extraContext}\n\nInstrução extra: ${extraInstruction}`.trim()
@@ -176,7 +189,7 @@ export function CampaignForm() {
         objective: form.objective,
         style: form.copyStyle,
         platform: form.platform,
-        creative_type: "image",
+        creative_type: file.type.startsWith("video/") ? "video" : "image",
         file_name: file.name,
         niche: form.niche,
         audience: form.audience,
@@ -209,6 +222,7 @@ export function CampaignForm() {
   }
 
   const previewAds = metaReadyPayload?.ads ?? [];
+  const previewMediaType = file?.type.startsWith("video/") ? "video" : "image";
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 overflow-x-hidden">
@@ -239,15 +253,15 @@ export function CampaignForm() {
               <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 p-6 text-center transition hover:border-violet-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900">
                 <Upload className="mb-2 h-5 w-5 text-slate-600 dark:text-slate-300" />
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Clique ou arraste sua imagem
+                  Clique ou arraste sua mídia
                 </span>
                 <span className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  PNG, JPG ou WEBP
+                  Imagem ou vídeo
                 </span>
 
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   onChange={(e) => handleFile(e.target.files?.[0] || null)}
                   className="hidden"
                 />
@@ -255,17 +269,25 @@ export function CampaignForm() {
 
               {preview ? (
                 <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-900">
-                  <img
-                    src={preview}
-                    alt="Preview do criativo"
-                    className="h-60 w-full object-cover"
-                  />
+                  {file?.type.startsWith("video/") ? (
+                    <video
+                      src={preview}
+                      controls
+                      className="h-60 w-full object-cover"
+                    />
+                  ) : (
+                    <img
+                      src={preview}
+                      alt="Preview do criativo"
+                      className="h-60 w-full object-cover"
+                    />
+                  )}
                 </div>
               ) : (
                 <div className="mt-4 flex h-60 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500">
                   <div className="text-center">
                     <ImageIcon className="mx-auto mb-2 h-8 w-8" />
-                    <p className="text-sm">Preview da imagem</p>
+                    <p className="text-sm">Preview da mídia</p>
                   </div>
                 </div>
               )}
@@ -385,6 +407,17 @@ export function CampaignForm() {
                 Exportar JSON Meta-ready
               </button>
             ) : null}
+
+            <div className="rounded-2xl bg-slate-50 p-4 text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              <div className="mb-1 flex items-center gap-2">
+                <Video className="h-4 w-4" />
+                Processamento de vídeo
+              </div>
+              <p>
+                Quando você envia um vídeo, o sistema extrai automaticamente um
+                frame e usa esse frame para gerar a análise completa.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -394,7 +427,11 @@ export function CampaignForm() {
               <ResultCard data={result} />
 
               {previewAds.length > 0 ? (
-                <AdPreviewSection ads={previewAds} mediaUrl={preview} />
+                <AdPreviewSection
+                  ads={previewAds}
+                  mediaUrl={preview}
+                  mediaType={previewMediaType}
+                />
               ) : null}
 
               {metaReadyPayload ? <JsonPreview payload={metaReadyPayload} /> : null}
@@ -493,9 +530,11 @@ function TextArea({
 function AdPreviewSection({
   ads,
   mediaUrl,
+  mediaType,
 }: {
   ads: MetaReadyPayload["ads"];
   mediaUrl?: string;
+  mediaType: "image" | "video";
 }) {
   return (
     <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-[#0f172a]">
@@ -511,7 +550,7 @@ function AdPreviewSection({
           <div key={ad.name + index} className="min-w-0">
             <AdPreviewCard
               mediaUrl={mediaUrl}
-              mediaType="image"
+              mediaType={mediaType}
               primaryText={ad.primary_text}
               headline={ad.headline}
               description={ad.description}
@@ -575,7 +614,7 @@ function EmptyState() {
         </h3>
 
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Envie uma imagem, defina o contexto da campanha e gere análise
+          Envie uma imagem ou vídeo, defina o contexto da campanha e gere análise
           completa, copy e estratégia.
         </p>
       </div>
