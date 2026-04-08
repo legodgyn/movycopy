@@ -76,6 +76,9 @@ type MetaReadyPayload = {
     objective_fit: string;
     suggested_test_plan: string[];
   };
+  video_analysis?: GeneratedCopy["video_analysis"];
+  diagnosis?: string[];
+  improvements?: string[];
 };
 
 export function CampaignForm() {
@@ -130,25 +133,17 @@ export function CampaignForm() {
         | {
             imageBase64: string;
             mimeType: string;
+            frames?: never;
           }
         | {
             frames: Array<{ base64: string; mimeType: string }>;
-            imageBase64: string;
-            mimeType: string;
+            imageBase64?: never;
+            mimeType?: never;
           };
 
       if (file.type.startsWith("video/")) {
         const frames = await extractVideoFrames(file, 6);
-
-        if (!frames.length) {
-          throw new Error("Não foi possível extrair os frames do vídeo.");
-        }
-
-        visualPayload = {
-          frames,
-          imageBase64: frames[0].base64,
-          mimeType: frames[0].mimeType,
-        };
+        visualPayload = { frames };
       } else {
         const imageBase64 = await fileToBase64(file);
         visualPayload = {
@@ -222,6 +217,9 @@ export function CampaignForm() {
         objective_fit: result.campaign_strategy.objective_fit,
         suggested_test_plan: result.campaign_strategy.suggested_test_plan,
       },
+      video_analysis: result.video_analysis,
+      diagnosis: result.diagnosis,
+      improvements: result.improvements,
     };
   }, [result, file, form]);
 
@@ -256,8 +254,8 @@ export function CampaignForm() {
         </h1>
 
         <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-          Faça uma leitura profunda do criativo e gere copy, ganchos, ângulos e
-          estratégia em nível profissional.
+          Faça uma leitura profunda do criativo e gere copy, ganchos, ângulos,
+          estratégia e análise avançada de vídeo em nível profissional.
         </p>
       </div>
 
@@ -430,11 +428,12 @@ export function CampaignForm() {
             <div className="rounded-2xl bg-slate-50 p-4 text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
               <div className="mb-1 flex items-center gap-2">
                 <Video className="h-4 w-4" />
-                Processamento de vídeo
+                Processamento de vídeo avançado
               </div>
               <p>
-                Quando você envia um vídeo, o sistema extrai automaticamente um
-                frame e usa esse frame para gerar a análise completa.
+                Quando você envia um vídeo, o sistema extrai múltiplos frames
+                ao longo do material e envia tudo para a IA fazer uma leitura
+                muito mais profunda de hook, retenção, clareza e CTA.
               </p>
             </div>
           </div>
