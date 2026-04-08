@@ -13,7 +13,7 @@ import {
   FileJson,
   LayoutPanelTop,
 } from "lucide-react";
-import { extractVideoFrame, fileToBase64 } from "@/lib/utils";
+import { extractVideoFrames, fileToBase64 } from "@/lib/utils";
 import type { GeneratedCopy } from "@/lib/schemas";
 import { ResultCard } from "./result-card";
 import { AdPreviewCard } from "@/components/ad-preview-card";
@@ -126,15 +126,35 @@ export function CampaignForm() {
         throw new Error("Selecione uma imagem ou vídeo.");
       }
 
-      let imageBase64 = "";
-      let mimeType = file.type;
+      let visualPayload:
+        | {
+            imageBase64: string;
+            mimeType: string;
+          }
+        | {
+            frames: Array<{ base64: string; mimeType: string }>;
+            imageBase64: string;
+            mimeType: string;
+          };
 
       if (file.type.startsWith("video/")) {
-        const frame = await extractVideoFrame(file);
-        imageBase64 = frame.base64;
-        mimeType = frame.mimeType;
+        const frames = await extractVideoFrames(file, 6);
+
+        if (!frames.length) {
+          throw new Error("Não foi possível extrair os frames do vídeo.");
+        }
+
+        visualPayload = {
+          frames,
+          imageBase64: frames[0].base64,
+          mimeType: frames[0].mimeType,
+        };
       } else {
-        imageBase64 = await fileToBase64(file);
+        const imageBase64 = await fileToBase64(file);
+        visualPayload = {
+          imageBase64,
+          mimeType: file.type,
+        };
       }
 
       const response = await fetch("/api/generate", {
@@ -143,8 +163,7 @@ export function CampaignForm() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          imageBase64,
-          mimeType,
+          ...visualPayload,
           ...form,
           extraContext: extraInstruction
             ? `${form.extraContext}\n\nInstrução extra: ${extraInstruction}`.trim()
