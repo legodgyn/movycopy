@@ -8,7 +8,20 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const parsed = GenerateRequestSchema.safeParse(body);
+
+    const normalizedBody = {
+      ...body,
+      imageBase64:
+        body?.imageBase64 ||
+        body?.frames?.[0]?.base64 ||
+        "",
+      mimeType:
+        body?.mimeType ||
+        body?.frames?.[0]?.mimeType ||
+        "",
+    };
+
+    const parsed = GenerateRequestSchema.safeParse(normalizedBody);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -22,6 +35,24 @@ export async function POST(req: Request) {
 
     const data = parsed.data;
 
+    const visualInputs = Array.isArray(body?.frames) && body.frames.length > 0
+      ? body.frames.map((frame: { base64: string; mimeType: string }) => ({
+          type: "input_image" as const,
+          image_url: `data:${frame.mimeType};base64,${frame.base64}`,
+          detail: "auto" as const,
+        }))
+      : [
+          {
+            type: "input_image" as const,
+            image_url: `data:${data.mimeType};base64,${data.imageBase64}`,
+            detail: "auto" as const,
+          },
+        ];
+
+    const videoInstruction = Array.isArray(body?.frames) && body.frames.length > 0
+      ? `\nVocê recebeu vários frames de um vídeo publicitário. Trate a entrada como uma sequência visual do mesmo anúncio e analise:\n- abertura\n- desenvolvimento da mensagem\n- consistência visual\n- clareza da oferta\n- presença e força do CTA\n- ritmo e retenção visual\n- coerência entre início, meio e fim\n`
+      : "";
+
     const response = await openai.responses.create({
       model: "gpt-4.1-mini",
       input: [
@@ -32,12 +63,11 @@ export async function POST(req: Request) {
         {
           role: "user",
           content: [
-            { type: "input_text", text: buildUserPrompt(data) },
             {
-              type: "input_image",
-              image_url: `data:${data.mimeType};base64,${data.imageBase64}`,
-              detail: "auto",
+              type: "input_text",
+              text: `${buildUserPrompt(data)}${videoInstruction}`,
             },
+            ...visualInputs,
           ],
         },
       ],
