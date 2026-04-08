@@ -28,13 +28,7 @@ export async function extractVideoFrame(file: File): Promise<{
   mimeType: string;
 }> {
   const frames = await extractVideoFrames(file, 1);
-  const firstFrame = frames[0];
-
-  if (!firstFrame) {
-    throw new Error("Não foi possível extrair frame do vídeo.");
-  }
-
-  return firstFrame;
+  return frames[0];
 }
 
 export async function extractVideoFrames(
@@ -45,33 +39,36 @@ export async function extractVideoFrames(
     const video = document.createElement("video");
     const canvas = document.createElement("canvas");
     const url = URL.createObjectURL(file);
+
     const frames: Array<{ base64: string; mimeType: string }> = [];
+    let points: number[] = [];
+
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      video.onloadedmetadata = null;
+      video.onloadeddata = null;
+      video.onseeked = null;
+      video.onerror = null;
+    };
 
     video.preload = "metadata";
     video.muted = true;
     video.playsInline = true;
     video.src = url;
 
-    const cleanup = () => {
-      video.onloadedmetadata = null;
-      video.onseeked = null;
-      video.onerror = null;
-      URL.revokeObjectURL(url);
-    };
-
     video.onloadedmetadata = async () => {
       try {
         const duration = video.duration || 1;
-        const safeFrameCount = Math.max(1, frameCount);
+        const safeDuration = Math.max(duration, 1);
 
-        const points = Array.from({ length: safeFrameCount }).map((_, index) => {
-          if (safeFrameCount === 1) {
-            return Math.min(1, Math.max(0.1, duration - 0.1));
+        points = Array.from({ length: frameCount }).map((_, index) => {
+          if (frameCount === 1) {
+            return Math.min(1, Math.max(0.1, safeDuration - 0.1));
           }
 
-          const progress = index / (safeFrameCount - 1);
-          const rawTime = duration * progress;
-          return Math.min(Math.max(0.1, rawTime), Math.max(0.1, duration - 0.1));
+          const progress = index / (frameCount - 1);
+          const time = safeDuration * progress;
+          return Math.min(Math.max(0.1, time), Math.max(0.1, safeDuration - 0.1));
         });
 
         canvas.width = video.videoWidth || 1280;
@@ -85,31 +82,33 @@ export async function extractVideoFrames(
           return;
         }
 
-        const captureAt = (time: number) =>
-          new Promise<void>((resolveCapture, rejectCapture) => {
-            video.onseeked = () => {
-              try {
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-                frames.push({
-                  base64: dataUrl.split(",")[1],
-                  mimeType: "image/jpeg",
-                });
-                resolveCapture();
-              } catch {
-                rejectCapture(new Error("Erro ao capturar frame."));
-              }
-            };
+        let currentIndex = 0;
 
-            video.currentTime = time;
-          });
+        video.onseeked = () => {
+          try {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+            frames.push({
+              base64: dataUrl.split(",")[1],
+              mimeType: "image/jpeg",
+            });
 
-        for (const point of points) {
-          await captureAt(point);
-        }
+            currentIndex += 1;
 
-        cleanup();
-        resolve(frames);
+            if (currentIndex >= points.length) {
+              cleanup();
+              resolve(frames);
+              return;
+            }
+
+            video.currentTime = points[currentIndex];
+          } catch {
+            cleanup();
+            reject(new Error("Erro ao capturar frame do vídeo."));
+          }
+        };
+
+        video.currentTime = points[currentIndex];
       } catch {
         cleanup();
         reject(new Error("Não foi possível extrair os frames do vídeo."));
